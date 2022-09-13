@@ -1,6 +1,6 @@
 import csv
 import requests
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 CSV_HEAD = [
     'Listing ID',
@@ -23,13 +23,15 @@ _headers = {
     'Content-Type': 'application/json'
 }
 
-def extract_json(url, data={}, verify_ssl=True) -> dict:
+def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
     formatted = []
     json = None
     try:
         response = requests.request('GET', url=url, headers=_headers, params=data, verify=verify_ssl)
+        generated_url = response.history[0].url if response.history else response.url
+        print(f"--> get data from : {generated_url}")
         json = response.json()
-    except requests.exceptions.HTTPError as err:
+    except requests.exceptions.HTTPError as e:
         print(e)
         print(f"Unable to get data from {url}")
     except Exception as e:
@@ -41,11 +43,31 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
             'data': formatted
         }
 
-    next_url = json['next']
-    results = json['results']
+    next_url = json['next'] if 'next' in json else None
+    results = json['results'] if 'results' in json else []
+
+    if not next_url and not results:
+        print(json)
+
     parsed_url = urlparse(url)
     base_url = parsed_url.scheme + '://' + parsed_url.netloc
+    url_queries = None
+    if parsed_url.query:
+        url_queries = parse_qs(parsed_url.query)
+
     search_type = data['search_type'] if 'search_type' in data else ''
+    rent_min__gt = data['rent_min__gt'] if 'rent_min__gt' in data else ''
+
+    if not search_type and url_queries:
+        search_type = url_queries['search_type'][0] if 'search_type' in url_queries else ''
+    if not rent_min__gt and url_queries:
+        rent_min__gt = url_queries['rent_min__gt'][0] if 'rent_min__gt' in url_queries else ''
+
+    if not search_type and others:
+        search_type = others['search_type'] if 'search_type' in others else ''
+    if not rent_min__gt and url_queries:
+        rent_min__gt = others['rent_min__gt'] if 'rent_min__gt' in others else ''
+
     country = ''
     currency = ''
 
@@ -64,14 +86,20 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
             listing_type = row['listing_type']
             if search_type in ['sale', 'both'] and listing_type == 'rent':
                 continue
-            if search_type == 'rent' and (listing_type == 'sale' or listing_type == 'sale/rent'):
-                continue
+            if search_type == 'rent':
+                if (listing_type == 'sale' or listing_type == 'sale/rent'):
+                    continue
+                if (rent_min__gt and int(row['rent_min']) <= int(rent_min__gt)):
+                    continue
 
             features = []
             if row['bedrooms']:
                 features.append(f"{row['bedrooms']} bed")
             if row['bathrooms']:
                 features.append(f"{row['bathrooms']} bath")
+            headline = row['headline_en'].strip()
+            if headline.startswith('"') and headline.endswith('"'):
+                headline = headline[1:-1]
             description = ', '.join(features)
             image_url = row['images'][0]['url']
             price = row['price_min'] if row['listing_type'] in ['sale', 'sale/rent'] else row['rent_min']
@@ -80,7 +108,7 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
 
             listing = [
                 row['id'],
-                row['headline_en'],
+                headline,
                 base_url + row['url'],
                 image_url,
                 f"{row['address_locality']}, {row['address_subdivision']}",
@@ -88,7 +116,7 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
                 price,
                 row['category_name'],
                 listing_type,
-                f"{row['headline_en']} for {listing_type} in {row['address_line_2']} ID {row['id']}",
+                f"{headline} for {listing_type} in {row['address_line_2']} ID {row['id']}",
                 f"{row['address_locality']}, {row['address_subdivision']}, {country}"
                 '',
                 ''
@@ -117,6 +145,8 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
                 print(f"{k} : {v}")
             print('--------------------- end : error ---------------------')
 
+    print(f"...{len(formatted):,} data read")
+
     return {
         'next': next_url,
         'data': formatted
@@ -124,7 +154,9 @@ def extract_json(url, data={}, verify_ssl=True) -> dict:
 
 
 def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
-    with open(filename, mode, encoding='UTF8', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(CSV_HEAD)
+    with open(filename, mode, encoding='utf-8', newline='') as f:
+        writer = csv.writer(f, delimiter=',', lineterminator='\r\n', quoting=csv.QUOTE_NONNUMERIC)
+        if mode == 'w':
+            writer.writerow(CSV_HEAD)
         writer.writerows(csv_data)
+        print(f"...{len(csv_data):,} data writen")
