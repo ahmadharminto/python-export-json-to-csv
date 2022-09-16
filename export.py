@@ -1,10 +1,21 @@
 import os
 import time
 from dotenv import load_dotenv
-from utils import extract_json, write_to_csv
-from urllib.parse import urlencode
+from utils import (
+    extract_json, 
+    init_google_spreadsheet, 
+    write_to_csv, 
+    write_to_gsheet,
+    send_mail_notif
+)
 
 load_dotenv()
+
+EXPORT_TO = os.getenv('EXPORT_TO', default='csv')
+if EXPORT_TO not in ['csv', 'google_spreadsheet']:
+    EXPORT_TO = 'csv'
+
+spreadsheet = init_google_spreadsheet('REAKH-HP Google Ads Feeds') if EXPORT_TO == 'google_spreadsheet' else None
 
 
 def get_next_data(url='', filename='', others={}, verify_ssl=True) -> int:
@@ -13,7 +24,10 @@ def get_next_data(url='', filename='', others={}, verify_ssl=True) -> int:
     next = response['next']
     count = len(data_rows)
 
-    write_to_csv(filename, data_rows, 'a')
+    if EXPORT_TO == 'csv':
+        write_to_csv(filename, data_rows, 'a')
+    elif EXPORT_TO == 'google_spreadsheet':
+        write_to_gsheet(spreadsheet, filename, data_rows, 'a')
     if next:
         time.sleep(1)
         count = count + get_next_data(next, filename, others)
@@ -27,12 +41,20 @@ def get_first_data(req={}, verify_ssl=True, mode='w') -> int:
     next = response['next']
     count = len(data_rows)
 
-    write_to_csv(req['filename'], data_rows, mode)
+    filename = ''
+    if EXPORT_TO == 'csv':
+        filename = req['filename']
+        write_to_csv(filename, data_rows, mode)
+    elif EXPORT_TO == 'google_spreadsheet':
+        filename = req['sheetname']
+        write_to_gsheet(spreadsheet, filename, data_rows, mode)
+    
     if next:
         time.sleep(1)
-        count = count + get_next_data(next, req['filename'], req['others'], verify_ssl)
+        count = count + get_next_data(next, filename, req['others'], verify_ssl)
 
     return count
+
 
 def export_data():
     page_size = 200
@@ -43,6 +65,7 @@ def export_data():
     export_list = [
         {
             'filename': 'exported/feed1.csv',
+            'sheetname': 'Feed1',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -55,6 +78,7 @@ def export_data():
         },
         {
             'filename': 'exported/feed2.csv',
+            'sheetname': 'Feed2',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -90,6 +114,7 @@ def export_data():
         },
         {
             'filename': 'exported/feed3.csv',
+            'sheetname': 'Feed3',
             'url': url_hp,
             'filters': {
                 'status': 'current',
@@ -99,11 +124,18 @@ def export_data():
                 'page_size': page_size
             },
             'others': {}
-        }
+        },
     ]
 
+    mail_messages = []
     for req in export_list:
-        print(f"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< [process: {req['filename']}]")
+        filename = ''
+        if EXPORT_TO == 'csv':
+            filename = req['filename']
+        elif EXPORT_TO == 'google_spreadsheet':
+            filename = req['sheetname']
+
+        print(f"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< [process: {filename}]")
         count = 0
         if req['others']:
             search_type = req['filters']['search_type'] if 'search_type' in req['filters'] else ''
@@ -123,10 +155,13 @@ def export_data():
         else:
             count += get_first_data(req)
 
+        msg = f"{count:,} data exported to {filename}"
+        mail_messages.append(msg)
         print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        print(f"{count:,} data exported to {req['filename']}")
+        print(msg)
         print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
 
+    send_mail_notif('Google Ads Feed Update', f"<b>Information : </b><ul><li>{'</li><li>'.join(mail_messages)}</li></ul>")
 
 if __name__ == '__main__':
     export_data()

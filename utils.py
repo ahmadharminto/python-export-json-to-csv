@@ -1,6 +1,15 @@
 import csv
+import os
 import requests
+import gspread
+import pandas as pd
+import smtplib
+from dotenv import load_dotenv
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from urllib.parse import urlparse, parse_qs
+
+load_dotenv()
 
 CSV_HEAD = [
     'Listing ID',
@@ -22,6 +31,7 @@ _headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
 }
+
 
 def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
     formatted = []
@@ -160,3 +170,61 @@ def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
             writer.writerow(CSV_HEAD)
         writer.writerows(csv_data)
         print(f"...{len(csv_data):,} data writen")
+
+
+def init_google_spreadsheet(spreadsheet_name=''):
+    try:
+        google_spread = gspread.service_account(filename='./google-service.json')
+        return google_spread.open(spreadsheet_name)
+    except Exception as e:
+        print(f'Error : {e}')
+        return None
+
+
+def write_to_gsheet(spreadsheet, sheet_name='Feed1', csv_data=[], mode='w'):
+    if not spreadsheet:
+        print("Error : spreadsheet not initialized yet")
+        return
+
+    try:
+        worksheet = spreadsheet.worksheet(sheet_name)
+        if mode == 'w':
+            worksheet.clear()
+            head_df = pd.DataFrame([CSV_HEAD])
+            worksheet.update(head_df.values.tolist())
+        csv_df = pd.DataFrame(csv_data)
+        worksheet.append_rows(csv_df.values.tolist())
+        print(f"...{len(csv_data):,} data writen")
+    except Exception as e:
+        print(f'Error : {e}')
+
+
+def send_mail_notif(title='', body=''):
+    sender_address = os.getenv('MAIL_USERNAME')
+    sender_pass = os.getenv('MAIL_PASSWORD')
+    receiver_address = os.getenv('MAIL_TO').split(',')
+    mail_host = os.getenv('MAIL_HOST')
+    mail_port = os.getenv('MAIL_PORT')
+    
+    message = MIMEMultipart('alternative')
+    message['From'] = sender_address
+    message['To'] = ','.join(receiver_address)
+    message['Subject'] = title   
+    message.attach(MIMEText(format_body_html(body), 'html'))
+
+    session = smtplib.SMTP(mail_host, mail_port)
+    session.ehlo()
+    session.starttls()
+    session.login(sender_address, sender_pass)
+    session.sendmail(sender_address, receiver_address, message.as_string())
+    session.quit()
+
+    print('~~~~~~~~~Mail Sent~~~~~~~~~')
+
+
+def format_body_html(body=''):
+    return f' \
+        <html> \
+        <head></head> \
+        <body>{body}</body> \
+        </html>'
