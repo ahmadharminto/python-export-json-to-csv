@@ -174,7 +174,7 @@ def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
 
 def init_google_spreadsheet(spreadsheet_name=''):
     try:
-        google_spread = gspread.service_account(filename='./google-service.json')
+        google_spread = gspread.service_account(filename='google-service.json')
         return google_spread.open(spreadsheet_name)
     except Exception as e:
         print(f'Error : {e}')
