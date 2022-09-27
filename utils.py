@@ -24,8 +24,7 @@ CSV_HEAD = [
     'Listing type',
     'Contextual keywords',
     'Address',
-    'Tracking template',
-    'Custom parameter1'
+    'Tracking template'
 ]
 
 _headers = {
@@ -131,7 +130,6 @@ def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
                 listing_type,
                 f"{headline} for {listing_type} in {row['address_line_2']} ID {row['id']}",
                 f"{row['address_locality']}, {row['address_subdivision']}, {country}"
-                '',
                 ''
             ]
             formatted.append(listing)
