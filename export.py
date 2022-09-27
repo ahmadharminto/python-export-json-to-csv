@@ -65,7 +65,7 @@ def export_data():
     export_list = [
         {
             'filename': 'exported/feed1.csv',
-            'sheetname': 'Feed1',
+            'sheetname': 'KH: For Sale (Condo, House, project, Villa)',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -78,7 +78,7 @@ def export_data():
         },
         {
             'filename': 'exported/feed2.csv',
-            'sheetname': 'Feed2',
+            'sheetname': 'KH: For Rent Above $700 (Referral Agencies)',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -114,7 +114,7 @@ def export_data():
         },
         {
             'filename': 'exported/feed3.csv',
-            'sheetname': 'Feed3',
+            'sheetname': 'HP: Rental properties',
             'url': url_hp,
             'filters': {
                 'status': 'current',
