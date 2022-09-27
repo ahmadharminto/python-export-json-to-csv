@@ -7,6 +7,7 @@ import smtplib
 from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 load_dotenv()
@@ -31,6 +32,8 @@ _headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
 }
+
+CWD = str(Path.cwd()) + '/'
 
 
 def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
@@ -164,7 +167,7 @@ def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
 
 
 def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
-    with open(filename, mode, encoding='utf-8', newline='') as f:
+    with open(CWD + filename, mode, encoding='utf-8', newline='') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\r\n', quoting=csv.QUOTE_NONNUMERIC)
         if mode == 'w':
             writer.writerow(CSV_HEAD)
@@ -174,7 +177,7 @@ def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
 
 def init_google_spreadsheet(spreadsheet_name=''):
     try:
-        google_spread = gspread.service_account(filename='google-service.json')
+        google_spread = gspread.service_account(filename=CWD + 'google-service.json')
         return google_spread.open(spreadsheet_name)
     except Exception as e:
         print(f'Error : {e}')

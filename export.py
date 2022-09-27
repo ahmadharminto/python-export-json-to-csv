@@ -15,10 +15,8 @@ EXPORT_TO = os.getenv('EXPORT_TO', default='csv')
 if EXPORT_TO not in ['csv', 'google_spreadsheet']:
     EXPORT_TO = 'csv'
 
-spreadsheet = init_google_spreadsheet('REAKH-HP Google Ads Feeds') if EXPORT_TO == 'google_spreadsheet' else None
 
-
-def get_next_data(url='', filename='', others={}, verify_ssl=True) -> int:
+def get_next_data(url='', filename='', others={}, verify_ssl=True, spreadsheet=None) -> int:
     response = extract_json(url, others=others, verify_ssl=verify_ssl)
     data_rows = response['data']
     next = response['next']
@@ -30,7 +28,7 @@ def get_next_data(url='', filename='', others={}, verify_ssl=True) -> int:
         write_to_gsheet(spreadsheet, filename, data_rows, 'a')
     if next:
         time.sleep(1)
-        count = count + get_next_data(next, filename, others)
+        count = count + get_next_data(next, filename, others, verify_ssl, spreadsheet)
 
     return count
 
@@ -40,25 +38,27 @@ def get_first_data(req={}, verify_ssl=True, mode='w') -> int:
     data_rows = response['data']
     next = response['next']
     count = len(data_rows)
+    spreadsheet = None
 
     filename = ''
     if EXPORT_TO == 'csv':
         filename = req['filename']
         write_to_csv(filename, data_rows, mode)
     elif EXPORT_TO == 'google_spreadsheet':
+        spreadsheet = init_google_spreadsheet(req['spreadsheet_name'])
         filename = req['sheetname']
         write_to_gsheet(spreadsheet, filename, data_rows, mode)
     
     if next:
         time.sleep(1)
-        count = count + get_next_data(next, filename, req['others'], verify_ssl)
+        count = count + get_next_data(next, filename, req['others'], verify_ssl, spreadsheet)
 
     return count
 
 
 def export_data():
     page_size = 200
-    url_local = os.getenv('LOCAL_BASE_URL') + '/api/listing/'
+    # url_local = os.getenv('LOCAL_BASE_URL') + '/api/listing/'
     url_reakh = os.getenv('REAKH_BASE_URL') + '/api/listing/'
     url_hp = os.getenv('HAUSPLES_BASE_URL') + '/api/listing/'
 
@@ -66,6 +66,8 @@ def export_data():
         {
             'filename': 'exported/feed1.csv',
             'sheetname': 'KH_ForSale_Condo-House-project-Villa',
+            'spreadsheet_name': 'KH_ForSale_Condo-House-project-Villa',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1TPbzbha-Pce9SI5XV2hYi5Gd7jQ38LZ1arXtiCV53fo/',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -79,6 +81,8 @@ def export_data():
         {
             'filename': 'exported/feed2.csv',
             'sheetname': 'KH_ForRent_Above-USD700-Referral-Agencies',
+            'spreadsheet_name': 'KH_ForRent_Above-USD700-Referral-Agencies',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1d2fO_Hdt3pZJDCknsLZCzui8gwcAyLGlUCxrbcXhqRg/',
             'url': url_reakh,
             'filters': {
                 'status': 'current',
@@ -115,6 +119,8 @@ def export_data():
         {
             'filename': 'exported/feed3.csv',
             'sheetname': 'HP_Rentalproperties',
+            'spreadsheet_name': 'HP_Rentalproperties',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1dOQPmjl70jtjO_rY7-Mz1iNke9f3W8NSQdGkLuF9wWw/',
             'url': url_hp,
             'filters': {
                 'status': 'current',
@@ -130,10 +136,13 @@ def export_data():
     mail_messages = []
     for req in export_list:
         filename = ''
+        filename_on_mail = ''
         if EXPORT_TO == 'csv':
             filename = req['filename']
+            filename_on_mail = req['filename']
         elif EXPORT_TO == 'google_spreadsheet':
-            filename = req['sheetname']
+            filename = req['spreadsheet_name']
+            filename_on_mail = f"<a href=\"{req['spreadsheet_url']}\" target=\"_blank\">{req['spreadsheet_name']}</a>"
 
         print(f"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< [process: {filename}]")
         count = 0
@@ -155,7 +164,7 @@ def export_data():
         else:
             count += get_first_data(req)
 
-        msg = f"{count:,} data exported to {filename}"
+        msg = f"{count:,} data exported to {filename_on_mail}"
         mail_messages.append(msg)
         print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         print(msg)
