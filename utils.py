@@ -32,7 +32,7 @@ _headers = {
     'Content-Type': 'application/json'
 }
 
-CWD = Path(__file__).parent.resolve() + '/'
+CWD = str(Path(__file__).parent.resolve()) + '/'
 
 
 def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
