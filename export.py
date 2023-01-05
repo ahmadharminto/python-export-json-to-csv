@@ -1,4 +1,6 @@
+import getopt
 import os
+import sys
 import time
 from dotenv import load_dotenv
 from utils import (
@@ -56,7 +58,7 @@ def get_first_data(req={}, verify_ssl=True, mode='w') -> int:
     return count
 
 
-def export_data():
+def export_data(argv):
     page_size = 200
     # url_local = os.getenv('LOCAL_BASE_URL') + '/api/listing/'
     url_reakh = os.getenv('REAKH_BASE_URL') + '/api/listing/'
@@ -131,10 +133,85 @@ def export_data():
             },
             'others': {}
         },
+        {
+            'filename': 'exported/feed4.csv',
+            'sheetname': 'HP_Allprojects',
+            'spreadsheet_name': 'HP_Allprojects',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1st2LqwUyyIZI4trkmtQZs-c3TZZXVK2FW5j7-w7az-o/',
+            'url': url_hp,
+            'filters': {
+                'status': 'current',
+                'get_child_listings': True,
+                'categories': ['project', 'compounds', 'Apartment', 'Land'],
+                'page_size': page_size
+            },
+            'others': {}
+        },
+        {
+            'filename': 'exported/feed5.csv',
+            'sheetname': 'KH_ForSale_newdev-condo-apartments-houses-boreys',
+            'spreadsheet_name': 'KH_ForSale_newdev-condo-apartments-houses-boreys',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1E0ruQCfUfAFSuNvTF8VLkihS4Ak6B0w-eZTRGZRUqwk/',
+            'url': url_reakh,
+            'filters': {
+                'status': 'current',
+                'get_child_listings': True,
+                'search_type': 'sale',
+                'categories': ['project', 'Condo', 'Apartment', 'House', 'borey'],
+                'page_size': page_size
+            },
+            'others': {}
+        },
+        {
+            'filename': 'exported/feed6.csv',
+            'sheetname': 'KH_ForRent_newdev-condo-apartments-houses-boreys',
+            'spreadsheet_name': 'KH_ForRent_newdev-condo-apartments-houses-boreys',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1VS6slDy7I1niTcmqDCzaggEYzpofaBAov9XJGNPmAxM/',
+            'url': url_reakh,
+            'filters': {
+                'status': 'current',
+                'get_child_listings': True,
+                'search_type': 'rent',
+                'categories': ['project', 'Condo', 'Apartment', 'House', 'borey'],
+                'page_size': page_size
+            },
+            'others': {}
+        },
     ]
 
+    arg_index = ""
+    arg_help = f"{argv[0]} -i <export_list_index:0-{len(export_list)-1}>"
+
+    def print_help():
+        print(arg_help)
+        print(f"example with index : {argv[0]} -i 0,1,2 | {argv[0]} --index 0,1,2")
+        for i in range(len(export_list)):
+            sheet_name = export_list[i].get("sheetname")
+            print(f"{i} : {sheet_name}")
+
+    try:
+        opts, args = getopt.getopt(argv[1:], "hi:", ["help", "index=",])
+    except:
+        print_help()
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print_help()
+            sys.exit(2)
+        elif opt in ("-i", "--index"):
+            arg_index = arg
+
+    arg_index_list = arg_index.split(",") if arg_index else []
+    arg_index_list = list(map(int, arg_index_list))
+
     mail_messages = []
+    i = 0
+    processed = 0
     for req in export_list:
+        if arg_index_list and i not in arg_index_list:
+            i += 1
+            continue
         filename = ''
         filename_on_mail = ''
         if EXPORT_TO == 'csv':
@@ -169,8 +246,11 @@ def export_data():
         print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         print(msg)
         print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        i += 1
+        processed += 1
 
-    send_mail_notif('Google Ads Feed Update', f"<b>Information : </b><ul><li>{'</li><li>'.join(mail_messages)}</li></ul>")
+    if processed > 0:
+        send_mail_notif('Google Ads Feed Update', f"<b>Information : </b><ul><li>{'</li><li>'.join(mail_messages)}</li></ul>")
 
 if __name__ == '__main__':
-    export_data()
+    export_data(sys.argv)
