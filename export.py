@@ -138,13 +138,14 @@ def export_data(argv):
             'sheetname': 'HP_Allprojects',
             'spreadsheet_name': 'HP_Allprojects',
             'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/1st2LqwUyyIZI4trkmtQZs-c3TZZXVK2FW5j7-w7az-o/',
-            'url': url_hp,
-            'filters': {
-                'status': 'current',
-                'get_child_listings': True,
-                'categories': ['project', 'compounds', 'Apartment', 'Land'],
-                'page_size': page_size
-            },
+            'url': None,
+            'urls': [
+                f"https://www.hausples.com.pg/api/portal/pages/results/?active_tab=recent&order_by=relevance&property_type=residential&q=office%3A%20Hausples%20Support&search_type=rent&page_size={page_size}",
+                f"https://www.hausples.com.pg/api/portal/pages/results/?active_tab=recent&order_by=relevance&property_type=project&q=office%3A%20Hausples%20Support&search_type=rent&page_size={page_size}",
+                f"https://www.hausples.com.pg/api/portal/pages/results/?active_tab=recent&order_by=relevance&property_type=commercial&q=office%3A%20Hausples%20Support&search_type=rent&page_size={page_size}",
+                f"https://www.hausples.com.pg/api/portal/pages/results/?active_tab=recent&order_by=relevance&property_type=compounds&q=office%3A%20Hausples%20Support&search_type=rent&page_size={page_size}"
+            ],
+            'filters': {},
             'others': {}
         },
         {
@@ -223,23 +224,32 @@ def export_data(argv):
 
         print(f"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< [process: {filename}]")
         count = 0
-        if req['others']:
-            search_type = req['filters']['search_type'] if 'search_type' in req['filters'] else ''
-            offices = req['others']['offices'] if 'offices' in req['others'] else []
-            rent_min__gt = req['others']['rent_min__gt'] if 'rent_min__gt' in req['others'] else ''
-            if search_type == 'rent' and rent_min__gt:
-                req['filters']['price_min__gte'] = rent_min__gt
-            if offices:
-                idx_office = 1
-                for office_id in offices:
-                    req['filters']['offices'] = [office_id]
-                    mode = 'w' if idx_office == 1 else 'a'
-                    count += get_first_data(req, True, mode)
-                    idx_office += 1
+        if req['url']:
+            if req['others']:
+                search_type = req['filters']['search_type'] if 'search_type' in req['filters'] else ''
+                offices = req['others']['offices'] if 'offices' in req['others'] else []
+                rent_min__gt = req['others']['rent_min__gt'] if 'rent_min__gt' in req['others'] else ''
+                if search_type == 'rent' and rent_min__gt:
+                    req['filters']['price_min__gte'] = rent_min__gt
+                if offices:
+                    idx_office = 1
+                    for office_id in offices:
+                        req['filters']['offices'] = [office_id]
+                        mode = 'w' if idx_office == 1 else 'a'
+                        count += get_first_data(req, True, mode)
+                        idx_office += 1
+                else:
+                    count += get_first_data(req)
             else:
                 count += get_first_data(req)
         else:
-            count += get_first_data(req)
+            if req['urls']:
+                idx_url = 1
+                for url in req['urls']:
+                    mode = 'w' if idx_url == 1 else 'a'
+                    req['url'] = url
+                    count += get_first_data(req, True, mode)
+                    idx_url += 1
 
         msg = f"{count:,} data exported to {filename_on_mail}"
         mail_messages.append(msg)

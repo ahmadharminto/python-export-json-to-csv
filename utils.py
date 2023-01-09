@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 
 load_dotenv()
 
@@ -35,7 +35,7 @@ _headers = {
 CWD = str(Path(__file__).parent.resolve()) + '/'
 
 
-def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
+def extract_json_al(url, data={}, others={}, verify_ssl=True) -> dict:
     formatted = []
     json = None
     try:
@@ -162,6 +162,125 @@ def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
         'next': next_url,
         'data': formatted
     }
+
+
+def extract_json_appr(url, data={}, others={}, verify_ssl=True) -> dict:
+    formatted = []
+    json = None
+    try:
+        response = requests.request('GET', url=url, headers=_headers, params=data, verify=verify_ssl)
+        generated_url = response.history[0].url if response.history else response.url
+        print(f"--> get data from : {generated_url}")
+        json = response.json()
+    except requests.exceptions.HTTPError as e:
+        print(e)
+        print(f"Unable to get data from {url}")
+    except Exception as e:
+        print(e)
+        print(f"Unable to get data from {url}")
+    if not json:
+        return {
+            'next': None,
+            'data': formatted
+        }
+
+    parsed_url = urlparse(url)
+    base_url = parsed_url.scheme + '://' + parsed_url.netloc    
+    url_queries = {}
+    if parsed_url.query:
+        url_queries = parse_qs(parsed_url.query)
+        for k,v in url_queries.items():
+            url_queries[k] = v[0]
+
+    next_url = None
+    last_page = json['last_page']
+    page = url_queries['page'] if 'page' in url_queries else 1
+    page = int(page)
+    if page < int(last_page):
+        page += 1
+        url_queries['page'] = page
+        url_params = urlencode(url_queries)
+        next_url = f"{base_url}{parsed_url.path}?{url_params}"        
+
+    results = json['results'] if 'results' in json else []
+
+    if not next_url and not results:
+        print(json)
+
+    country = ''
+    currency = ''
+
+    if 'realestate.com.kh' in base_url:
+        country = 'Cambodia'
+        currency = 'USD'
+    elif 'hausples.com.pg' in base_url:
+        country = 'Papua New Guinea'
+        currency = 'PGK'
+
+    for row in results:
+        try:
+            if not row['images']:
+                continue
+
+            listing_type = row['listing_type']
+            headline = row['headline'].strip()
+            if headline.startswith('"') and headline.endswith('"'):
+                headline = headline[1:-1]
+            description = headline
+            image_url = row['images'][0]['url']
+            price = row['display_price'] if listing_type in ['sale', 'sale/rent'] else row['display_rent']
+            price = price.replace('K', '')
+
+            listing = [
+                row['id'],
+                headline,
+                base_url + row['url'],
+                image_url,
+                f"{row['address']}",
+                description,
+                f"{price} {currency}",
+                row['category_name'],
+                listing_type,
+                f"{row['title_img_alt']}",
+                f"{row['address']}, {country}"
+                ''
+            ]
+            formatted.append(listing)
+        except Exception as e:
+            print('--------------------- begin : error ---------------------')
+            print(e)
+            for k,v in row.items():
+                if k not in [
+                    'id', 
+                    'headline_en', 
+                    'url', 
+                    'listing_type',
+                    'bedrooms',
+                    'bathrooms',
+                    'images',
+                    'price_min',
+                    'rent_min',
+                    'address_locality',
+                    'address_subdivision',
+                    'category_name',
+                    'address_line_2'
+                ]:
+                    continue
+                print(f"{k} : {v}")
+            print('--------------------- end : error ---------------------')
+
+    print(f"...{len(formatted):,} data read")
+
+    return {
+        'next': next_url,
+        'data': formatted
+    }
+
+
+def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
+    if "/api/portal/pages/results" in url:
+        return extract_json_appr(url, data, others, verify_ssl)
+    return extract_json_al(url, data, others, verify_ssl)
 
 
 def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
