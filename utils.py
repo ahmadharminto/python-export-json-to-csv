@@ -12,7 +12,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 
 load_dotenv()
 
-CSV_HEAD = [
+CSV_HEAD_DEFAULT = [
     'Listing ID',
     'Listing Name',
     'Final URL',
@@ -138,9 +138,9 @@ def extract_json_al(url, data={}, others={}, verify_ssl=True) -> dict:
             print(e)
             for k,v in row.items():
                 if k not in [
-                    'id', 
-                    'headline_en', 
-                    'url', 
+                    'id',
+                    'headline_en',
+                    'url',
                     'listing_type',
                     'bedrooms',
                     'bathrooms',
@@ -185,7 +185,7 @@ def extract_json_appr(url, data={}, others={}, verify_ssl=True) -> dict:
         }
 
     parsed_url = urlparse(url)
-    base_url = parsed_url.scheme + '://' + parsed_url.netloc    
+    base_url = parsed_url.scheme + '://' + parsed_url.netloc
     url_queries = {}
     if parsed_url.query:
         url_queries = parse_qs(parsed_url.query)
@@ -200,7 +200,7 @@ def extract_json_appr(url, data={}, others={}, verify_ssl=True) -> dict:
         page += 1
         url_queries['page'] = page
         url_params = urlencode(url_queries)
-        next_url = f"{base_url}{parsed_url.path}?{url_params}"        
+        next_url = f"{base_url}{parsed_url.path}?{url_params}"
 
     results = json['results'] if 'results' in json else []
 
@@ -251,9 +251,9 @@ def extract_json_appr(url, data={}, others={}, verify_ssl=True) -> dict:
             print(e)
             for k,v in row.items():
                 if k not in [
-                    'id', 
-                    'headline_en', 
-                    'url', 
+                    'id',
+                    'headline_en',
+                    'url',
                     'listing_type',
                     'bedrooms',
                     'bathrooms',
@@ -283,11 +283,137 @@ def extract_json(url, data={}, others={}, verify_ssl=True) -> dict:
     return extract_json_al(url, data, others, verify_ssl)
 
 
-def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w'):
+def extract_json_detail_al(url, verify_ssl=True, fields=[]) -> dict:
+    formatted = []
+    json = None
+    try:
+        response = requests.request('GET', url=url, headers=_headers, verify=verify_ssl)
+        generated_url = response.history[0].url if response.history else response.url
+        print(f"--> get data from : {generated_url}")
+        json = response.json()
+    except requests.exceptions.HTTPError as e:
+        print(e)
+        print(f"Unable to get data from {url}")
+    except Exception as e:
+        print(e)
+        print(f"Unable to get data from {url}")
+    if not json:
+        return {
+            'data': formatted
+        }
+
+    row = json
+
+    if not json:
+        print(row)
+
+    parsed_url = urlparse(url)
+    base_url = parsed_url.scheme + '://' + parsed_url.netloc
+
+    country = ''
+    currency = ''
+
+    if 'realestate.com.kh' in base_url:
+        country = 'Cambodia'
+        currency = 'USD'
+    elif 'hausples.com.pg' in base_url:
+        country = 'Papua New Guinea'
+        currency = 'PGK'
+
+    try:
+        listing_type = row['listing_type']
+
+        features = []
+        if row['bedrooms']:
+            features.append(f"{row['bedrooms']} bed")
+        if row['bathrooms']:
+            features.append(f"{row['bathrooms']} bath")
+        headline = row['headline_en'].strip()
+        if headline.startswith('"') and headline.endswith('"'):
+            headline = headline[1:-1]
+        description = row['description_en']
+        if features:
+            description += ' -> Features : '
+            description += ', '.join(features)
+        image_url = row['images'][0]['url'] if row['images'] else ''
+        price = row['price_min'] if row['listing_type'] in ['sale', 'sale/rent'] else row['rent_min']
+        if price:
+            price = f"{price:,} {currency}"
+
+        is_project = len(row['nested']) > 0
+
+        if fields:
+            for f in fields:
+                if f == 'id':
+                    formatted.append(row['id'])
+                elif f == 'headline':
+                    formatted.append(headline)
+                elif f == 'front_url':
+                    formatted.append(base_url + row['url'])
+                elif f == 'image':
+                    formatted.append(image_url)
+                elif f == 'description':
+                    formatted.append(description)
+                elif f == 'price':
+                    formatted.append(price)
+                elif f == 'category':
+                    formatted.append(row['category_name'])
+                elif f == 'listing_type':
+                    formatted.append(listing_type)
+                elif f == 'address':
+                    formatted.append(f"{row['address_locality']}, {row['address_subdivision']}, {country}")
+                elif f == 'country':
+                    formatted.append(country)
+                elif f == 'city':
+                    formatted.append(row['address_subdivision'])
+                elif f == 'district':
+                    formatted.append(row['address_locality'])
+                elif f == 'commune':
+                    formatted.append(row['address_line_2'])
+                elif f == 'street_name':
+                    formatted.append(row['address_line_1'])
+                elif f == 'latitude':
+                    formatted.append(row['address_latitude'])
+                elif f == 'longitude':
+                    formatted.append(row['address_longitude'])
+                elif f == 'back_url':
+                    id = row['id']
+                    path = 'projectlisting' if is_project else 'listing'
+                    formatted.append(f"{base_url}/wagtail-admin/listings/{path}/edit/{id}/#tab-location")
+                else:
+                    formatted.append('-unknown key-')
+        else:
+            formatted = [
+                row['id'],
+                headline,
+                base_url + row['url'],
+                image_url,
+                f"{row['address_locality']}, {row['address_subdivision']}",
+                description,
+                price,
+                row['category_name'],
+                listing_type,
+                f"{headline} for {listing_type} in {row['address_line_2']} ID {row['id']}",
+                f"{row['address_locality']}, {row['address_subdivision']}, {country}",
+                is_project,
+            ]
+    except Exception as e:
+        print('--------------------- begin : error ---------------------')
+        print(e)
+        print('--------------------- end : error ---------------------')
+
+    return {
+        'data': formatted
+    }
+
+
+def write_to_csv(filename='exported/export.csv', csv_data=[], mode='w', csv_head=[]):
     with open(CWD + filename, mode, encoding='utf-8', newline='') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\r\n', quoting=csv.QUOTE_NONNUMERIC)
+        if not csv_head:
+            csv_head = CSV_HEAD_DEFAULT
         if mode == 'w':
-            writer.writerow(CSV_HEAD)
+            writer.writerow(csv_head)
         writer.writerows(csv_data)
         print(f"...{len(csv_data):,} data writen")
 
@@ -310,7 +436,7 @@ def write_to_gsheet(spreadsheet, sheet_name='Feed1', csv_data=[], mode='w'):
         worksheet = spreadsheet.worksheet(sheet_name)
         if mode == 'w':
             worksheet.clear()
-            head_df = pd.DataFrame([CSV_HEAD])
+            head_df = pd.DataFrame([CSV_HEAD_DEFAULT])
             worksheet.update(head_df.values.tolist())
         csv_df = pd.DataFrame(csv_data)
         worksheet.append_rows(csv_df.values.tolist())
@@ -325,11 +451,11 @@ def send_mail_notif(title='', body=''):
     receiver_address = os.getenv('MAIL_TO').split(',')
     mail_host = os.getenv('MAIL_HOST')
     mail_port = os.getenv('MAIL_PORT')
-    
+
     message = MIMEMultipart('alternative')
     message['From'] = sender_address
     message['To'] = ','.join(receiver_address)
-    message['Subject'] = title   
+    message['Subject'] = title
     message.attach(MIMEText(format_body_html(body), 'html'))
 
     session = smtplib.SMTP(mail_host, mail_port)

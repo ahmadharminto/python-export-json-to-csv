@@ -4,9 +4,10 @@ import sys
 import time
 from dotenv import load_dotenv
 from utils import (
-    extract_json, 
-    init_google_spreadsheet, 
-    write_to_csv, 
+    extract_json,
+    extract_json_detail_al,
+    init_google_spreadsheet,
+    write_to_csv,
     write_to_gsheet,
     send_mail_notif
 )
@@ -50,7 +51,7 @@ def get_first_data(req={}, verify_ssl=True, mode='w') -> int:
         spreadsheet = init_google_spreadsheet(req['spreadsheet_name'])
         filename = req['sheetname']
         write_to_gsheet(spreadsheet, filename, data_rows, mode)
-    
+
     if next:
         time.sleep(1)
         count = count + get_next_data(next, filename, req['others'], verify_ssl, spreadsheet)
@@ -91,7 +92,7 @@ def export_data(argv):
                 'get_child_listings': True,
                 'search_type': 'rent',
                 'categories': ['House', 'Villa', 'Condo', 'Apartment', 'Studio'],
-                'page_size': page_size  
+                'page_size': page_size
             },
             'others': {
                 'rent_min__gt': 700,
@@ -115,7 +116,7 @@ def export_data(argv):
                     7001, # Expert realty (apimo)
                     6104, # Expert realty
                     6927 # MLS Property Cambodia
-                ], 
+                ],
             }
         },
         {
@@ -128,7 +129,7 @@ def export_data(argv):
                 'status': 'current',
                 'get_child_listings': True,
                 'search_type': 'rent',
-                'categories': ['Apartment', 'Townhouse', 'ServicedApartment'],            
+                'categories': ['Apartment', 'Townhouse', 'ServicedApartment'],
                 'page_size': page_size
             },
             'others': {}
@@ -262,5 +263,47 @@ def export_data(argv):
     if processed > 0:
         send_mail_notif('Google Ads Feed Update', f"<b>Information : </b><ul><li>{'</li><li>'.join(mail_messages)}</li></ul>")
 
+
+def get_data_address(req={}, verify_ssl=True, mode='w') -> int:
+    response = extract_json(req['url'], req['filters'], req['others'], verify_ssl)
+    data_rows = response['data']
+    next = response['next']
+    count = len(data_rows)
+
+    filename = req['filename']
+    csv_data = []
+    fields = ['country', 'city', 'district', 'commune', 'street_name', 'latitude', 'longitude', 'back_url']
+    for row in data_rows:
+        detail_url = req['base_url'] + str(row[0]) + '/?get_child_listings=True';
+        detail_data = extract_json_detail_al(detail_url, verify_ssl, fields)
+        csv_data.append(detail_data['data'])
+    write_to_csv(filename, csv_data, mode, fields)
+
+    if next:
+        time.sleep(1)
+        req['filters'] = {}
+        req['url'] = next
+        count += get_data_address(req, verify_ssl, mode='a')
+
+    return count
+
+
+def export_address():
+    filename = 'exported/address.csv'
+    # url = os.getenv('REAKH_BASE_URL') + '/api/listing/'
+    url = os.getenv('HAUSPLES_BASE_URL') + '/api/listing/'
+    req = {
+        'base_url': url,
+        'url': url,
+        'filename': filename,
+        'filters': {
+            'page_size': 200
+        },
+        'others': {}
+    }
+    count = get_data_address(req)
+
+
 if __name__ == '__main__':
-    export_data(sys.argv)
+    # export_data(sys.argv)
+    export_address()
